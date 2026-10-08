@@ -2933,6 +2933,7 @@ if (MODE === 'github') {
   setInterval(() => { if (!document.hidden) refresh(false); }, 60000);
 } else if (MODE === 'local') {
   setInterval(() => refresh(false), 3000);   // picks up words added in the game
+  window.addEventListener('pagehide', () => { try { navigator.sendBeacon('/api/bye'); } catch { } });
 } else if (window.SAMPLE) { V = SAMPLE.vocab; P = SAMPLE.progress; }
 render();
 refresh(true);
