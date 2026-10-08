@@ -2838,7 +2838,10 @@ function pairHTML() {
   return `<div class="pair">
     <h2>Herbier</h2>
     <p>Это твой гербарий на телефоне. Чтобы подключить его к словам из игры, открой Herbier на компьютере, выбери «Синхронизация» и отсканируй QR-код камерой телефона.</p>
-    <details><summary>Ввести вручную</summary>
+    <label class="field" style="margin-top:18px"><span>Или вставь ссылку подключения из Herbier на компьютере</span><input id="pLink" placeholder="https://jisien0.github.io/herbier/#pair=…" autocomplete="off"></label>
+    <button class="btn primary" id="pLinkGo">Подключить</button>
+    <div class="msg" id="pLinkMsg"></div>
+    <details><summary>Ввести ключ вручную</summary>
       <div style="margin-top:12px">
         <label class="field"><span>Репозиторий с данными</span><input id="pRepo" value="${DEFAULT_REPO}"></label>
         <label class="field"><span>Ключ доступа (github_pat_…)</span><input id="pTok" type="password" autocomplete="off"></label>
@@ -2849,6 +2852,12 @@ function pairHTML() {
   </div>`;
 }
 function bindPair() {
+  const lg = $('pLinkGo');
+  if (lg) lg.onclick = async () => {
+    const m = ($('pLink').value || '').match(/pair=([A-Za-z0-9_\-=]+)/);
+    if (!m) { $('pLinkMsg').className = 'msg err'; $('pLinkMsg').textContent = 'Это не ссылка подключения. Скопируй её в Herbier на компьютере: «Синхронизация» → «Скопировать ссылку».'; return; }
+    location.hash = 'pair=' + m[1];
+  };
   const b = $('pSave'); if (!b) return;
   b.onclick = async () => {
     const r = $('pRepo').value.trim(), t = $('pTok').value.trim();
@@ -2909,11 +2918,16 @@ async function renderSync() {
       </ol>
     </div>
     <dl class="facts"><dt>Данные</dt><dd>${esc(cfg.repo)}</dd><dt>Последняя синхронизация</dt><dd>${ago(cfg.last)}</dd>${cfg.error ? `<dt>Ошибка</dt><dd style="color:var(--f)">${esc(cfg.error)}</dd>` : ''}</dl>
-    <div class="row"><button class="btn primary" id="sNow">Синхронизировать сейчас</button><button class="btn" id="sOff">Отключить синхронизацию</button></div>
+    <div class="row"><button class="btn" id="sCopy">Скопировать ссылку для телефона</button><button class="btn primary" id="sNow">Синхронизировать сейчас</button><button class="btn" id="sOff">Отключить синхронизацию</button></div>
     <div class="msg" id="sMsg"></div>
-    <p style="font-size:14px;margin-top:22px">Этот QR-код содержит твой ключ доступа. Не показывай его другим людям.</p>
+    <p style="font-size:14px;margin-top:22px">Для iPhone: перешли себе эту ссылку (например, в Telegram «Избранное»), открой Herbier с главного экрана и вставь её в поле «Ссылка подключения».<br>Этот QR-код содержит твой ключ доступа. Не показывай его другим людям.</p>
   </div>`;
   drawQR($('qr'), pairUrl);
+  $('sCopy').onclick = async () => {
+    const m = $('sMsg');
+    try { await navigator.clipboard.writeText(pairUrl); m.className = 'msg ok'; m.textContent = 'Ссылка скопирована. Не пересылай её другим людям: в ней твой ключ.'; }
+    catch { m.className = 'msg'; m.textContent = pairUrl; }
+  };
   $('sNow').onclick = async () => { const m = $('sMsg'); m.className = 'msg'; m.textContent = 'Синхронизирую…'; const r = await Local.post('/api/sync/now'); m.className = 'msg ' + (r && r.ok ? 'ok' : 'err'); m.textContent = r && r.ok ? 'Готово' : ((r && r.error) || 'Не получилось'); await Local.load(true); renderSide(); };
   $('sOff').onclick = async () => { await Local.post('/api/sync/config', { off: true }); await Local.load(true); renderSync(); renderSide(); };
 }
