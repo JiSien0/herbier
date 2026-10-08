@@ -167,6 +167,7 @@ body{font-variant-numeric:lining-nums tabular-nums}
 aside{overflow-y:auto;overflow-x:hidden}
 .filters button{line-height:1.3;padding:5px 10px}
 .spec .pos .theme{color:var(--leaf)}
+.filters button.zero{color:var(--muted);opacity:.6}
 </style>
 </head>
 <body>
@@ -2723,12 +2724,12 @@ function renderSide() {
   $('tbDue').textContent = due ? '· ' + due : '';
   const c = {}; V.forEach(v => { const t = themeOf(v); c[t] = (c[t] || 0) + 1; });
   const items = [['all', lang === 'en' ? 'All words' : 'Все слова', V.length]]
-    .concat(THEMES.filter(t => c[t[0]]).map(t => [t[0], lang === 'en' ? t[2] : t[1], c[t[0]]]))
+    .concat(THEMES.map(t => [t[0], lang === 'en' ? t[2] : t[1], c[t[0]] || 0]))
     .concat(c['?'] ? [['?', lang === 'en' ? 'Other' : 'Другое', c['?']]] : []);
   if (filt !== 'all' && !items.some(x => x[0] === filt)) filt = 'all';
   const f = $('filters');
   f.innerHTML = `<h2>${lang === 'en' ? 'Themes' : 'Темы'}</h2>` + items.map(([k, n, cnt]) =>
-    `<button data-k="${k}" aria-pressed="${filt === k}">${esc(n)}<span class="n">${cnt}</span></button>`).join('');
+    `<button data-k="${k}" aria-pressed="${filt === k}" class="${cnt ? '' : 'zero'}">${esc(n)}<span class="n">${cnt}</span></button>`).join('');
   f.querySelectorAll('button').forEach(b => b.onclick = () => { filt = b.dataset.k; if (view === 'rev') { queue = []; cur = null; buildQueue(); } else view = 'list'; closeMenu(); render(); });
   for (const [id, v] of [['navList', 'list'], ['navRev', 'rev'], ['navSync', 'sync'], ['tbList', 'list'], ['tbRev', 'rev']]) $(id).setAttribute('aria-current', view === v);
   renderPill();
