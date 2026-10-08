@@ -15,6 +15,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
 <style>
 :root{
+  color-scheme:light;
   --paper:#E3E8DA; --label:#F1F3EB; --ink:#1E2620; --muted:#5D695E; --rule:#B7C1AE;
   --m:#2C6266; --f:#8A3B64; --v:#8F6219; --o:#5F6683; --leaf:#4E7A45;
   --serif:"Cormorant Garamond", Georgia, "Times New Roman", serif;
@@ -154,6 +155,18 @@ details{margin-top:18px} summary{cursor:pointer;color:var(--muted)}
   .sheet{columns:1}
 }
 .close-menu{all:unset;display:none;cursor:pointer;align-self:flex-end;font-size:28px;line-height:1;color:var(--muted)}
+
+/* ---------- polish ---------- */
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){color-scheme:dark} }
+:root[data-theme="dark"]{color-scheme:dark}
+body{font-variant-numeric:lining-nums tabular-nums}
+.tally b{font:600 24px/1.15 var(--sans);font-variant-numeric:lining-nums tabular-nums}
+*{scrollbar-width:thin;scrollbar-color:var(--rule) transparent}
+::-webkit-scrollbar{width:8px;height:8px} ::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--rule);border-radius:8px} ::-webkit-scrollbar-button{display:none}
+aside{overflow-y:auto;overflow-x:hidden}
+.filters button{line-height:1.3;padding:5px 10px}
+.spec .pos .theme{color:var(--leaf)}
 </style>
 </head>
 <body>
@@ -2518,7 +2531,19 @@ function ago(ms) {
 }
 
 // ---------------- word kinds ----------------
-const KINDS = [['all', '', 'Все слова'], ['m', '♂', 'Мужской род'], ['f', '♀', 'Женский род'], ['v', '✦', 'Глаголы'], ['a', '◇', 'Прилагательные'], ['o', '·', 'Остальное']];
+const THEMES = [
+  ['jardin', 'Сад и растения', 'Garden & plants'], ['magie', 'Магия и некромантия', 'Magic & necromancy'],
+  ['alchimie', 'Алхимия и зелья', 'Alchemy & potions'], ['nature', 'Природа и погода', 'Nature & weather'],
+  ['betes', 'Животные и существа', 'Animals & creatures'], ['cuisine', 'Еда и напитки', 'Food & drink'],
+  ['maison', 'Дом и вещи', 'Home & objects'], ['village', 'Деревня и торговля', 'Village & trade'],
+  ['gens', 'Люди и отношения', 'People & relationships'], ['corps', 'Тело и здоровье', 'Body & health'],
+  ['emotions', 'Чувства и характер', 'Feelings & character'], ['actions', 'Действия', 'Actions'],
+  ['temps', 'Время, место, количество', 'Time, place, quantity'], ['parler', 'Разговорная речь', 'Colloquial speech'],
+  ['base', 'Основа языка', 'Language core'], ['jeu', 'Игра и интерфейс', 'Game & interface'], ['noms', 'Имена и названия', 'Names'],
+];
+const themeName = id => { const t = THEMES.find(x => x[0] === id); return t ? (lang === 'en' ? t[2] : t[1]) : (lang === 'en' ? 'Other' : 'Другое'); };
+const themeOf = v => THEMES.some(x => x[0] === v.th) ? v.th : '?';
+const inFilter = v => filt === 'all' || themeOf(v) === filt;
 function kind(p) { p = (p || '').toLowerCase(); if (p.startsWith('n.m')) return 'm'; if (p.startsWith('n.f')) return 'f'; if (p.startsWith('v')) return 'v'; if (p.startsWith('adj')) return 'a'; return 'o'; }
 const SYM = { m: '♂', f: '♀', v: '✦', a: '◇', o: '·' };
 const kcol = k => `var(--${k === 'a' ? 'v' : k})`;
@@ -2696,11 +2721,15 @@ function renderSide() {
   $('nList').textContent = V.length;
   $('nDue').textContent = due || '';
   $('tbDue').textContent = due ? '· ' + due : '';
-  const c = { all: V.length, m: 0, f: 0, v: 0, a: 0, o: 0 }; V.forEach(v => c[kind(v.p)]++);
+  const c = {}; V.forEach(v => { const t = themeOf(v); c[t] = (c[t] || 0) + 1; });
+  const items = [['all', lang === 'en' ? 'All words' : 'Все слова', V.length]]
+    .concat(THEMES.filter(t => c[t[0]]).map(t => [t[0], lang === 'en' ? t[2] : t[1], c[t[0]]]))
+    .concat(c['?'] ? [['?', lang === 'en' ? 'Other' : 'Другое', c['?']]] : []);
+  if (filt !== 'all' && !items.some(x => x[0] === filt)) filt = 'all';
   const f = $('filters');
-  f.innerHTML = '<h2>Показывать</h2>' + KINDS.map(([k, s, n]) =>
-    `<button data-k="${k}" aria-pressed="${filt === k}"><span class="sym" style="color:${k === 'all' ? 'var(--ink)' : kcol(k)}">${s}</span>${n}<span class="n">${c[k]}</span></button>`).join('');
-  f.querySelectorAll('button').forEach(b => b.onclick = () => { filt = b.dataset.k; view = 'list'; closeMenu(); render(); });
+  f.innerHTML = `<h2>${lang === 'en' ? 'Themes' : 'Темы'}</h2>` + items.map(([k, n, cnt]) =>
+    `<button data-k="${k}" aria-pressed="${filt === k}">${esc(n)}<span class="n">${cnt}</span></button>`).join('');
+  f.querySelectorAll('button').forEach(b => b.onclick = () => { filt = b.dataset.k; if (view === 'rev') { queue = []; cur = null; buildQueue(); } else view = 'list'; closeMenu(); render(); });
   for (const [id, v] of [['navList', 'list'], ['navRev', 'rev'], ['navSync', 'sync'], ['tbList', 'list'], ['tbRev', 'rev']]) $(id).setAttribute('aria-current', view === v);
   renderPill();
 }
@@ -2711,7 +2740,7 @@ function specHTML(v) {
   return `<article class="spec k-${k === 'a' ? 'v' : k}">
     <button class="del" data-l="${esc(v.l)}" title="Убрать из гербария" aria-label="Удалить ${esc(v.l)}">×</button>
     <div class="head"><span class="sex" aria-hidden="true">${SYM[k]}</span><h3 class="lem"><span class="art">${article(v)}</span>${esc(v.l)}</h3></div>
-    <div class="pos">${esc(posName(v.p))}</div>
+    <div class="pos">${esc(posName(v.p))}${filt === 'all' && v.th ? ` · <span class="theme">${esc(themeName(themeOf(v)))}</span>` : ''}</div>
     <div class="tr">${esc(tr) || '<span style="color:var(--muted)">перевода нет</span>'}</div>
     ${v.c ? `<div class="hab">«&#8239;${habitat(v)}&#8239;»</div>` : ''}
     <footer>${glyph(st)}<span>${(lang === 'en' ? STAGES_EN : STAGES_RU)[st]}</span>${seen ? `<span>${seen}</span>` : ''}<span style="margin-left:auto">${fmtDate(v.d)}</span></footer>
@@ -2726,7 +2755,7 @@ function emptyHTML() {
 function renderList() {
   const main = $('main');
   if (!V.length) { main.innerHTML = emptyHTML(); bindPair(); return; }
-  let list = V.filter(v => filt === 'all' || kind(v.p) === filt);
+  let list = V.filter(inFilter);
   if (q) { const s = q.toLowerCase(); list = list.filter(v => [v.l, v.w, v.ru, v.en, v.c].some(x => (x || '').toLowerCase().includes(s))); }
   const coll = new Intl.Collator('fr');
   list = list.map((v, i) => [v, i]);
@@ -2752,7 +2781,7 @@ function renderList() {
 // ---------------- review ----------------
 let queue = [], cur = null, shown = false;
 function buildQueue() {
-  queue = V.filter(v => isDue(v.l)).sort((a, b) => prog(a.l).due - prog(b.l).due).slice(0, 40);
+  queue = V.filter(v => inFilter(v) && isDue(v.l)).sort((a, b) => prog(a.l).due - prog(b.l).due).slice(0, 40);
   for (let i = queue.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [queue[i], queue[j]] = [queue[j], queue[i]]; }
 }
 function renderReview() {
@@ -2762,13 +2791,13 @@ function renderReview() {
   if (!cur) {
     const next = V.map(v => prog(v.l).due).filter(d => d > Date.now()).sort((a, b) => a - b)[0];
     const when = next ? new Date(next).toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }) : null;
-    main.innerHTML = `<div class="empty"><h2>${V.length ? 'На сегодня всё' : 'Повторять пока нечего'}</h2><p>${V.length ? (when ? `Следующие слова созреют для повторения: ${when}.` : '') : 'Сначала собери несколько слов в игре: Shift + клик по слову.'}</p>${V.length ? '<p><button class="btn" id="back">Вернуться в гербарий</button></p>' : ''}</div>`;
+    main.innerHTML = `<div class="empty"><h2>${V.length ? (filt !== 'all' ? 'В этой теме на сегодня всё' : 'На сегодня всё') : 'Повторять пока нечего'}</h2><p>${V.length ? (when ? `Следующие слова созреют для повторения: ${when}.` : '') : 'Сначала собери несколько слов в игре: Shift + клик по слову.'}</p>${V.length ? '<p><button class="btn" id="back">Вернуться в гербарий</button></p>' : ''}</div>`;
     const b = $('back'); if (b) b.onclick = () => { view = 'list'; render(); };
     return;
   }
   const v = cur, k = kind(v.p), tr = lang === 'en' ? v.en : v.ru, other = lang === 'en' ? v.ru : v.en, col = kcol(k);
   main.innerHTML = `<div class="review">
-    <div class="left">Осталось ${queue.length + 1}</div>
+    <div class="left">${filt !== 'all' ? esc(themeName(filt)) + ' · ' : ''}осталось ${queue.length + 1}</div>
     <div class="card">
       <div class="sex" style="color:${col}">${SYM[k]}</div>
       <div class="lem"><span class="art" style="font-style:normal;color:var(--muted);font-weight:500">${article(v)}</span>${esc(v.l)}</div>
