@@ -168,6 +168,25 @@ aside{overflow-y:auto;overflow-x:hidden}
 .filters button{line-height:1.3;padding:5px 10px}
 .spec .pos .theme{color:var(--leaf)}
 .filters button.zero{color:var(--muted);opacity:.6}
+
+/* ---------- edit + reverse review ---------- */
+.spec .edit{all:unset;position:absolute;top:9px;right:40px;cursor:pointer;color:var(--muted);font-size:17px;line-height:1;opacity:0}
+.spec:hover .edit,.spec .edit:focus-visible{opacity:1}
+.spec.editing{box-shadow:inset 0 0 0 4px var(--label), inset 0 0 0 5px var(--leaf)}
+.spec.editing .field{margin:10px 0 0}
+.spec textarea,.spec select{background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:8px 10px;font:inherit;color:inherit;width:100%;resize:vertical}
+.spec.editing .row{margin-top:12px}
+.review .left{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.card .ask{font:600 34px/1.2 var(--sans);margin:4px 0 6px}
+.card .hab mark.gap{text-decoration:none;color:var(--muted);letter-spacing:2px}
+@media (hover:none){ .spec .del,.spec .edit{opacity:1} }
+@media (max-width:760px){
+  body{grid-template-columns:minmax(0,1fr)}
+  .topbar{gap:4px;padding:10px 12px}
+  .topbar b{font-size:26px}
+  .topbar button{padding:6px 8px;white-space:nowrap}
+  .search{min-width:0;width:100%;max-width:none;flex-basis:100%}
+}
 </style>
 </head>
 <body>
@@ -2599,6 +2618,7 @@ const Local = {
   },
   review(l, p) { return this.post('/api/review', Object.assign({ l }, p)); },
   del(l) { return this.post('/api/delete', { l }); },
+  edit(l, f) { return this.post('/api/edit', Object.assign({ l }, f)); },
 };
 
 // GitHub: data.json in a private repo, read/written with a fine-grained token
@@ -2643,6 +2663,7 @@ const GH = {
     const words = Object.assign({}, d.words), progress = Object.assign({}, d.progress);
     for (const o of ops) {
       if (o.op === 'del') { delete words[o.k]; delete progress[o.k]; }
+      if (o.op === 'edit' && words[o.k]) words[o.k] = Object.assign({}, words[o.k], o.f, { ed: o.t });
       if (o.op === 'rev' && (!progress[o.k] || (progress[o.k].t || 0) <= o.p.t)) progress[o.k] = o.p;
     }
     V = Object.values(words).sort((a, b) => (a.d || '').localeCompare(b.d || '') || (a.t || 0) - (b.t || 0));
@@ -2662,6 +2683,7 @@ const GH = {
   queue(op) { this.pending.push(op); store('herbier-pending', JSON.stringify(this.pending)); this.apply(); this.schedule(2500); },
   review(l, p) { this.queue({ op: 'rev', k: key(l), p }); },
   del(l) { this.queue({ op: 'del', k: key(l), t: Date.now() }); },
+  edit(l, f) { this.queue({ op: 'edit', k: key(l), f, t: Date.now() }); },
   schedule(ms) { clearTimeout(this.timer); this.timer = setTimeout(() => this.push(), ms); },
   async push(attempt = 0) {
     if (this.busy || !this.pending.length || !this.cfg) return;
@@ -2671,6 +2693,7 @@ const GH = {
       const { doc, sha } = await this.fetchDoc();
       for (const o of ops) {
         if (o.op === 'del') { delete doc.words[o.k]; delete doc.progress[o.k]; doc.deleted[o.k] = o.t; }
+        if (o.op === 'edit' && doc.words[o.k] && (doc.words[o.k].ed || 0) <= o.t) Object.assign(doc.words[o.k], o.f, { ed: o.t });
         if (o.op === 'rev' && (!doc.progress[o.k] || (doc.progress[o.k].t || 0) <= o.p.t)) doc.progress[o.k] = o.p;
       }
       const body = { message: 'Herbier: телефон', content: this.b64enc(JSON.stringify(doc)) };
@@ -2689,7 +2712,7 @@ const GH = {
   },
 };
 
-const Demo = { async load() { return false; }, review() { }, del() { } };
+const Demo = { async load() { return false; }, review() { }, del() { }, edit() { } };
 const B = MODE === 'local' ? Local : MODE === 'github' ? GH : Demo;
 let syncInfo = null;
 
@@ -2735,11 +2758,34 @@ function renderSide() {
   renderPill();
 }
 
+let editKey = null;
+const POS_LIST = ['n.m.', 'n.f.', 'n.', 'v.', 'adj.', 'adv.', 'prep.', 'conj.', 'pron.', 'interj.', 'loc.', 'nom propre'];
+function editHTML(v) {
+  const k = kind(v.p), pos = POS_LIST.includes(v.p) ? POS_LIST : [v.p].concat(POS_LIST);
+  return `<article class="spec k-${k === 'a' ? 'v' : k} editing" data-l="${esc(v.l)}">
+    <div class="head"><span class="sex" aria-hidden="true">${SYM[k]}</span><h3 class="lem">${esc(v.l)}</h3></div>
+    <label class="field"><span>Перевод на русский</span><textarea id="eRu" rows="2">${esc(v.ru)}</textarea></label>
+    <label class="field"><span>Перевод на английский</span><input id="eEn" value="${esc(v.en)}"></label>
+    <div class="row">
+      <label class="field" style="flex:1"><span>Часть речи</span><select id="eP">${pos.map(p => `<option value="${esc(p)}"${p === v.p ? ' selected' : ''}>${esc(POSRU[p] || p)}</option>`).join('')}</select></label>
+      <label class="field" style="flex:1.4"><span>Тема</span><select id="eTh">${THEMES.map(t => `<option value="${t[0]}"${t[0] === v.th ? ' selected' : ''}>${esc(t[1])}</option>`).join('')}</select></label>
+    </div>
+    <div class="row"><button class="btn primary" id="eSave">Сохранить</button><button class="btn" id="eCancel">Отмена</button></div>
+  </article>`;
+}
+async function saveEdit(l) {
+  const f = { ru: $('eRu').value.trim(), en: $('eEn').value.trim(), p: $('eP').value, th: $('eTh').value };
+  const v = V.find(x => key(x.l) === key(l)); if (v) Object.assign(v, f, { ed: Date.now() });
+  editKey = null; render(); setStatus(`«${l}» сохранено`);
+  await B.edit(l, f);
+}
 function specHTML(v) {
+  if (editKey === key(v.l)) return editHTML(v);
   const k = kind(v.p), st = stage(v.l), tr = lang === 'en' ? v.en : v.ru;
   const seen = v.s > 1 ? `в игре встречено ${v.s} ${plural(v.s, 'раз', 'раза', 'раз')}` : '';
   return `<article class="spec k-${k === 'a' ? 'v' : k}">
     <button class="del" data-l="${esc(v.l)}" title="Убрать из гербария" aria-label="Удалить ${esc(v.l)}">×</button>
+    <button class="edit" data-l="${esc(v.l)}" title="Исправить перевод, часть речи или тему" aria-label="Изменить ${esc(v.l)}">✎</button>
     <div class="head"><span class="sex" aria-hidden="true">${SYM[k]}</span><h3 class="lem"><span class="art">${article(v)}</span>${esc(v.l)}</h3></div>
     <div class="pos">${esc(posName(v.p))}${filt === 'all' && v.th ? ` · <span class="theme">${esc(themeName(themeOf(v)))}</span>` : ''}</div>
     <div class="tr">${esc(tr) || '<span style="color:var(--muted)">перевода нет</span>'}</div>
@@ -2777,10 +2823,14 @@ function renderList() {
   qi.oninput = () => { q = qi.value; const pos = qi.selectionStart; renderList(); const n = $('q'); n.focus(); n.setSelectionRange(pos, pos); };
   main.querySelectorAll('.sort button').forEach(b => b.onclick = () => { sort = b.dataset.s; renderList(); });
   main.querySelectorAll('.del').forEach(b => b.onclick = () => del(b.dataset.l));
+  main.querySelectorAll('.edit').forEach(b => b.onclick = () => { editKey = key(b.dataset.l); renderList(); const t = $('eRu'); if (t) t.focus(); });
+  const es = $('eSave'); if (es) { es.onclick = () => saveEdit(es.closest('.spec').dataset.l); $('eCancel').onclick = () => { editKey = null; renderList(); }; }
 }
 
 // ---------------- review ----------------
-let queue = [], cur = null, shown = false;
+let queue = [], cur = null, shown = false, curDir = 'fr';
+let dir = (() => { const d = store('herbier-dir'); return d === 'ru' || d === 'mix' ? d : 'fr'; })();
+const masked = (v, col) => habitat(v, col).replace(/<mark[^>]*>[\s\S]*?<\/mark>/, '<mark class="gap">＿＿＿</mark>');
 function buildQueue() {
   queue = V.filter(v => inFilter(v) && isDue(v.l)).sort((a, b) => prog(a.l).due - prog(b.l).due).slice(0, 40);
   for (let i = queue.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [queue[i], queue[j]] = [queue[j], queue[i]]; }
@@ -2788,7 +2838,7 @@ function buildQueue() {
 function renderReview() {
   const main = $('main');
   if (MODE === 'github' && !GH.cfg) { main.innerHTML = pairHTML(); bindPair(); return; }
-  if (!cur) { cur = queue.shift() || null; shown = false; }
+  if (!cur) { cur = queue.shift() || null; shown = false; curDir = dir === 'mix' ? (Math.random() < 0.5 ? 'fr' : 'ru') : dir; }
   if (!cur) {
     const next = V.map(v => prog(v.l).due).filter(d => d > Date.now()).sort((a, b) => a - b)[0];
     const when = next ? new Date(next).toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }) : null;
@@ -2797,19 +2847,26 @@ function renderReview() {
     return;
   }
   const v = cur, k = kind(v.p), tr = lang === 'en' ? v.en : v.ru, other = lang === 'en' ? v.ru : v.en, col = kcol(k);
+  const dirBar = `<div class="seg dirseg" role="group" aria-label="Направление">${[['fr', 'FR → RU'], ['ru', 'RU → FR'], ['mix', 'вперемешку']].map(([d, n]) => `<button data-d="${d}" aria-pressed="${dir === d}">${n}</button>`).join('')}</div>`;
+  const art = `<span class="art" style="font-style:normal;color:var(--muted);font-weight:500">${article(v)}</span>`;
+  const front = curDir === 'fr'
+    ? `<div class="sex" style="color:${col}">${SYM[k]}</div>
+       <div class="lem">${art}${esc(v.l)}</div>
+       <div class="pos">${esc(posName(v.p))}</div>
+       ${v.c ? `<div class="hab">«&#8239;${habitat(v, col)}&#8239;»</div>` : ''}
+       ${shown ? `<div class="ans">${esc(tr)}<div class="en">${esc(other)}</div></div>` : ''}`
+    : `<div class="ask">${esc(tr) || esc(other)}</div>
+       <div class="pos">${esc(posName(v.p))}${v.th ? ' · ' + esc(themeName(themeOf(v))) : ''}</div>
+       ${v.c ? `<div class="hab">«&#8239;${shown ? habitat(v, col) : masked(v, col)}&#8239;»</div>` : ''}
+       ${shown ? `<div class="ans"><div class="sex" style="color:${col}">${SYM[k]}</div><div class="lem">${art}${esc(v.l)}</div></div>` : ''}`;
   main.innerHTML = `<div class="review">
-    <div class="left">${filt !== 'all' ? esc(themeName(filt)) + ' · ' : ''}осталось ${queue.length + 1}</div>
-    <div class="card">
-      <div class="sex" style="color:${col}">${SYM[k]}</div>
-      <div class="lem"><span class="art" style="font-style:normal;color:var(--muted);font-weight:500">${article(v)}</span>${esc(v.l)}</div>
-      <div class="pos">${esc(posName(v.p))}</div>
-      ${v.c ? `<div class="hab">«&#8239;${habitat(v, col)}&#8239;»</div>` : ''}
-      ${shown ? `<div class="ans">${esc(tr)}<div class="en">${esc(other)}</div></div>` : ''}
-    </div>
+    <div class="left">${dirBar}<span>${filt !== 'all' ? esc(themeName(filt)) + ' · ' : ''}осталось ${queue.length + 1}</span></div>
+    <div class="card">${front}</div>
     <div class="acts">${shown
       ? `<button class="btn again" data-g="0">Не помню<kbd>1</kbd></button><button class="btn" data-g="1">С трудом<kbd>2</kbd></button><button class="btn good" data-g="2">Помню<kbd>3</kbd></button>`
-      : `<button class="btn primary" id="show">Показать перевод<kbd>пробел</kbd></button>`}</div>
+      : `<button class="btn primary" id="show">${curDir === 'fr' ? 'Показать перевод' : 'Показать французское слово'}<kbd>пробел</kbd></button>`}</div>
   </div>`;
+  main.querySelectorAll('.dirseg button').forEach(bt => bt.onclick = () => { dir = bt.dataset.d; store('herbier-dir', dir); curDir = dir === 'mix' ? curDir : dir; shown = false; renderReview(); });
   const s = $('show'); if (s) { s.onclick = () => { shown = true; renderReview(); }; s.focus({ preventScroll: true }); }
   main.querySelectorAll('[data-g]').forEach(b => b.onclick = () => grade(+b.dataset.g));
 }
