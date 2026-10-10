@@ -187,6 +187,10 @@ aside{overflow-y:auto;overflow-x:hidden}
   .topbar button{padding:6px 8px;white-space:nowrap}
   .search{min-width:0;width:100%;max-width:none;flex-basis:100%}
 }
+
+.k-i .sex,.k-i .hab mark{color:#8a4fbf}
+@media (prefers-color-scheme: dark){ .k-i .sex,.k-i .hab mark{color:#c79be8} }
+.k-i .lem{font-size:26px}
 </style>
 </head>
 <body>
@@ -2563,9 +2567,10 @@ const THEMES = [
 ];
 const themeName = id => { const t = THEMES.find(x => x[0] === id); return t ? (lang === 'en' ? t[2] : t[1]) : (lang === 'en' ? 'Other' : 'Другое'); };
 const themeOf = v => THEMES.some(x => x[0] === v.th) ? v.th : '?';
-const inFilter = v => filt === 'all' || themeOf(v) === filt;
+const isIdiom = v => (v.p || '') === 'loc.' || /\s/.test((v.l || '').trim());
+const inFilter = v => filt === 'all' || (filt === 'idiom' ? isIdiom(v) : themeOf(v) === filt);
 function kind(p) { p = (p || '').toLowerCase(); if (p.startsWith('n.m')) return 'm'; if (p.startsWith('n.f')) return 'f'; if (p.startsWith('v')) return 'v'; if (p.startsWith('adj')) return 'a'; return 'o'; }
-const SYM = { m: '♂', f: '♀', v: '✦', a: '◇', o: '·' };
+const SYM = { m: '♂', f: '♀', v: '✦', a: '◇', o: '·', i: '❝' };
 const kcol = k => `var(--${k === 'a' ? 'v' : k})`;
 const POSRU = { 'n.m.': 'сущ., мужской род', 'n.f.': 'сущ., женский род', 'n.': 'существительное', 'v.': 'глагол', 'adj.': 'прилагательное', 'adv.': 'наречие', 'prep.': 'предлог', 'conj.': 'союз', 'pron.': 'местоимение', 'interj.': 'междометие', 'n./adj.': 'сущ. / прил.', 'nom propre': 'имя собственное', 'loc.': 'выражение', 'élision': 'усечённая форма', 'num.': 'числительное' };
 const POSEN = { 'n.m.': 'noun, masculine', 'n.f.': 'noun, feminine', 'n.': 'noun', 'v.': 'verb', 'adj.': 'adjective', 'adv.': 'adverb', 'prep.': 'preposition', 'conj.': 'conjunction', 'pron.': 'pronoun', 'interj.': 'interjection', 'n./adj.': 'noun / adjective', 'nom propre': 'proper noun', 'loc.': 'expression', 'élision': 'elided form', 'num.': 'numeral' };
@@ -2746,7 +2751,7 @@ function renderSide() {
   $('nDue').textContent = due || '';
   $('tbDue').textContent = due ? '· ' + due : '';
   const c = {}; V.forEach(v => { const t = themeOf(v); c[t] = (c[t] || 0) + 1; });
-  const items = [['all', lang === 'en' ? 'All words' : 'Все слова', V.length]]
+  const items = [['all', lang === 'en' ? 'All words' : 'Все слова', V.length], ['idiom', lang === 'en' ? 'Expressions' : 'Выражения', V.filter(isIdiom).length]]
     .concat(THEMES.map(t => [t[0], lang === 'en' ? t[2] : t[1], c[t[0]] || 0]))
     .concat(c['?'] ? [['?', lang === 'en' ? 'Other' : 'Другое', c['?']]] : []);
   if (filt !== 'all' && !items.some(x => x[0] === filt)) filt = 'all';
@@ -2781,7 +2786,7 @@ async function saveEdit(l) {
 }
 function specHTML(v) {
   if (editKey === key(v.l)) return editHTML(v);
-  const k = kind(v.p), st = stage(v.l), tr = lang === 'en' ? v.en : v.ru;
+  const k = isIdiom(v) ? 'i' : kind(v.p), st = stage(v.l), tr = lang === 'en' ? v.en : v.ru;
   const seen = v.s > 1 ? `в игре встречено ${v.s} ${plural(v.s, 'раз', 'раза', 'раз')}` : '';
   return `<article class="spec k-${k === 'a' ? 'v' : k}">
     <button class="del" data-l="${esc(v.l)}" title="Убрать из гербария" aria-label="Удалить ${esc(v.l)}">×</button>
